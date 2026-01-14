@@ -29,6 +29,10 @@ const surahs = [
   "الفيل","قريش","الماعون","الكوثر","الكافرون","النصر",
   "المسد","الإخلاص","الفلق","الناس"
 ]
+bot.catch(err => {
+  console.error('BOT ERROR:', err)
+})
+
 
 function surahKeyboard() {
   const rows = []
@@ -178,6 +182,8 @@ bot.action(/rate_(\d+)/, async ctx => {
 })
 
 
+
+
 bot.action(/star_(\d+)_(\d)/, ctx => {
   const [ , id, stars ] = ctx.match
   achievements[id].rating = Number(stars)
@@ -232,8 +238,18 @@ bot.action(/send_(\d+)/, ctx => {
   ctx.reply('✅ تم الإرسال')
 })
 
+bot.on('callback_query', async ctx => {
+  try {
+    await ctx.answerCbQuery()
+  } catch (e) {
+    // تجاهل
+  }
+})
+
+
 bot.launch()
 console.log('Bot running...')
+
 
 
 
