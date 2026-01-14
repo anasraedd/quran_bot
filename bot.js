@@ -162,17 +162,20 @@ function saveAchievement(ctx, data) {
 }
 
 /* ================== التقييم ================== */
-bot.action(/rate_(\d+)/, ctx => {
+bot.action(/rate_(\d+)/, async ctx => {
+  await ctx.answerCbQuery() // 👈 مهم جدًا
   const id = ctx.match[1]
-  ctx.editMessageReplyMarkup(
+
+  await ctx.editMessageReplyMarkup(
     Markup.inlineKeyboard([
-      ['⭐⭐⭐⭐⭐ ممتاز',5],
-      ['⭐⭐⭐⭐ جيد جدًا',4],
-      ['⭐⭐⭐ جيد',3],
-      ['⭐⭐ مقبول',2],
-      ['⭐ يحتاج تحسين',1]
-    ].map(([t,v]) => [Markup.button.callback(t, `star_${id}_${v}`)]))
+      [Markup.button.callback('⭐⭐⭐⭐⭐ ممتاز', `star_${id}_5`)],
+      [Markup.button.callback('⭐⭐⭐⭐ جيد جدًا', `star_${id}_4`)],
+      [Markup.button.callback('⭐⭐⭐ جيد', `star_${id}_3`)],
+      [Markup.button.callback('⭐⭐ مقبول', `star_${id}_2`)],
+      [Markup.button.callback('⭐ يحتاج تحسين', `star_${id}_1`)]
+    ])
   )
+})
 })
 
 bot.action(/star_(\d+)_(\d)/, ctx => {
@@ -231,4 +234,5 @@ bot.action(/send_(\d+)/, ctx => {
 
 bot.launch()
 console.log('Bot running...')
+
 
