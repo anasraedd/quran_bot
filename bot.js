@@ -176,7 +176,7 @@ bot.action(/rate_(\d+)/, async ctx => {
     ])
   )
 })
-})
+
 
 bot.action(/star_(\d+)_(\d)/, ctx => {
   const [ , id, stars ] = ctx.match
@@ -234,5 +234,6 @@ bot.action(/send_(\d+)/, ctx => {
 
 bot.launch()
 console.log('Bot running...')
+
 
 
