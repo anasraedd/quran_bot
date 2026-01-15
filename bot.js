@@ -1,7 +1,4 @@
-const { Telegraf, Markup } = require('telegraf')
 
-const bot = new Telegraf(process.env.BOT_TOKEN)
-const OWNER_ID = Number(process.env.OWNER_ID)
 const { Telegraf, Markup } = require('telegraf')
 
 const bot = new Telegraf(process.env.BOT_TOKEN)
@@ -294,4 +291,5 @@ function sendToStudent(id, ctx) {
 
 bot.launch()
 console.log('Bot running...')
+
 
