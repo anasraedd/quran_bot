@@ -215,13 +215,59 @@ bot.action(/note_no_(\d+)/, ctx => {
 })
 
 bot.on('text', ctx => {
-  const key = waitingForInput[ctx.from.id]
-  if (key?.startsWith('note_')) {
-    const id = key.replace('note_', '')
-    achievements[id].notes = ctx.message.text
-    delete waitingForInput[ctx.from.id]
-    sendToStudent(id, ctx)
+  const uid = ctx.from.id
+  const text = ctx.message.text
+
+  /* ===== إدخال اسم الطالب ===== */
+  if (waitingForInput[uid]?.startsWith('name_')) {
+    const id = waitingForInput[uid].replace('name_', '')
+    achievements[id].studentName = text
+    waitingForInput[uid] = `note_${id}`
+
+    return ctx.reply(
+      'هل لديك ملاحظات؟',
+      Markup.inlineKeyboard([
+        [Markup.button.callback('✍️ نعم', `note_yes_${id}`)],
+        [Markup.button.callback('❌ لا يوجد', `note_no_${id}`)]
+      ])
+    )
   }
+
+  /* ===== إدخال ملاحظة ===== */
+  if (waitingForInput[uid]?.startsWith('note_')) {
+    const id = waitingForInput[uid].replace('note_', '')
+    achievements[id].notes = text
+    delete waitingForInput[uid]
+    return sendToStudent(id, ctx)
+  }
+
+  const session = sessions[uid]
+  if (!session) return
+
+  /* ===== تعليم ===== */
+  if (session.step === 'teach_details') {
+    session.data.details = text
+    saveAchievement(session.data)
+    delete sessions[uid]
+    return ctx.reply('🌸 تم تسجيل الإنجاز، بانتظار تقييم المعلّم')
+  }
+
+  /* ===== من آية ===== */
+  if (session.step === 'from') {
+    session.data.from = text
+    session.step = 'to'
+    return ctx.reply('🔢 إلى آية رقم:')
+  }
+
+  /* ===== إلى آية (هنا كانت المشكلة) ===== */
+  if (session.step === 'to') {
+    session.data.to = text
+    saveAchievement(session.data)
+    delete sessions[uid]
+    return ctx.reply('🌸 تم تسجيل الإنجاز، بانتظار تقييم المعلّم')
+  }
+})
+
 })
 
 /* ================== إرسال للطالب ================== */
@@ -248,3 +294,4 @@ function sendToStudent(id, ctx) {
 
 bot.launch()
 console.log('Bot running...')
+
