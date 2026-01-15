@@ -2,11 +2,15 @@ const { Telegraf, Markup } = require('telegraf')
 
 const bot = new Telegraf(process.env.BOT_TOKEN)
 const OWNER_ID = Number(process.env.OWNER_ID)
+const { Telegraf, Markup } = require('telegraf')
+
+const bot = new Telegraf(process.env.BOT_TOKEN)
+const OWNER_ID = Number(process.env.OWNER_ID)
 
 /* ================== التخزين ================== */
 const sessions = {}
 const achievements = {}
-const waitingForNote = {}
+const waitingForInput = {}
 let achievementId = 1
 
 /* ================== السور ================== */
@@ -29,11 +33,8 @@ const surahs = [
   "الفيل","قريش","الماعون","الكوثر","الكافرون","النصر",
   "المسد","الإخلاص","الفلق","الناس"
 ]
-bot.catch(err => {
-  console.error('BOT ERROR:', err)
-})
 
-
+/* ================== أدوات ================== */
 function surahKeyboard() {
   const rows = []
   for (let i = 0; i < surahs.length; i += 3) {
@@ -60,94 +61,109 @@ bot.hears('➕ إضافة إنجاز', ctx => {
     step: 'type',
     data: {
       studentId: ctx.from.id,
-      studentName: ctx.from.first_name
+      studentName: null
     }
   }
 
-ctx.reply(
-  'اختر نوع الإنجاز:',
-  Markup.inlineKeyboard([
-    [Markup.button.callback('📗 حفظ جديد', '📗 حفظ جديد')],
-    [Markup.button.callback('🔁 مراجعة قريبة', '🔁 مراجعة قريبة')],
-    [Markup.button.callback('🔂 مراجعة بعيدة', '🔂 مراجعة بعيدة')],
-    [Markup.button.callback('👨‍🏫 تعليم', '👨‍🏫 تعليم')]
-  ])
-)
-
+  ctx.reply(
+    'اختر نوع الإنجاز:',
+    Markup.inlineKeyboard([
+      [Markup.button.callback('📗 حفظ جديد', 'type_save')],
+      [Markup.button.callback('🔁 مراجعة قريبة', 'type_near')],
+      [Markup.button.callback('🔂 مراجعة بعيدة', 'type_far')],
+      [Markup.button.callback('👨‍🏫 تعليم', 'type_teach')]
+    ])
+  )
 })
 
-/* ================== callback ================== */
-bot.on('callback_query', ctx => {
-  const data = ctx.callbackQuery.data
+/* ================== نوع الإنجاز ================== */
+bot.action(/type_(.+)/, ctx => {
   const session = sessions[ctx.from.id]
   if (!session) return
 
-  // نوع الإنجاز
-  if (['📗 حفظ جديد','🔁 مراجعة قريبة','🔂 مراجعة بعيدة','👨‍🏫 تعليم'].includes(data)) {
-    session.data.type = data
-
-    if (data === '👨‍🏫 تعليم') {
-      session.step = 'teaching_details'
-      return ctx.reply('✍️ اكتب تفاصيل التعليم:')
-    }
-
-    session.step = 'surah'
-    return ctx.reply('📖 اختر السورة:', surahKeyboard())
+  const map = {
+    save: '📗 حفظ جديد',
+    near: '🔁 مراجعة قريبة',
+    far: '🔂 مراجعة بعيدة',
+    teach: '👨‍🏫 تعليم'
   }
 
-  // السورة
-  if (data.startsWith('surah_')) {
-    session.data.surah = data.replace('surah_', '')
-    session.step = 'from'
-    return ctx.reply('🔢 من آية رقم:')
+  session.data.type = map[ctx.match[1]]
+
+  if (ctx.match[1] === 'teach') {
+    session.step = 'teach_details'
+    return ctx.reply('✍️ اكتب تفاصيل التعليم:')
   }
+
+  session.step = 'surah'
+  ctx.reply('📖 اختر السورة:', surahKeyboard())
 })
 
-/* ================== text ================== */
+/* ================== السورة ================== */
+bot.action(/surah_(.+)/, ctx => {
+  const session = sessions[ctx.from.id]
+  if (!session) return
+
+  session.data.surah = ctx.match[1]
+  session.step = 'from'
+  ctx.reply('🔢 من آية رقم:')
+})
+
+/* ================== النصوص ================== */
 bot.on('text', ctx => {
-  const session = sessions[ctx.from.id]
+  const uid = ctx.from.id
 
-  // ملاحظة المعلم
-  if (waitingForNote[ctx.from.id]) {
-    const id = waitingForNote[ctx.from.id]
-    achievements[id].notes = ctx.message.text
-    delete waitingForNote[ctx.from.id]
-    return askSend(ctx, id)
+  /* إدخال اسم الطالب من المعلّم */
+  if (waitingForInput[uid]?.startsWith('name_')) {
+    const id = waitingForInput[uid].replace('name_', '')
+    achievements[id].studentName = ctx.message.text
+    waitingForInput[uid] = `note_${id}`
+
+    return ctx.reply(
+      'هل لديك ملاحظات؟',
+      Markup.inlineKeyboard([
+        [Markup.button.callback('✍️ نعم', `note_yes_${id}`)],
+        [Markup.button.callback('❌ لا يوجد', `note_no_${id}`)]
+      ])
+    )
   }
 
+  /* تفاصيل التعليم */
+  const session = sessions[uid]
   if (!session) return
 
-  switch (session.step) {
-    case 'from':
-      session.data.from = ctx.message.text
-      session.step = 'to'
-      return ctx.reply('🔢 إلى آية رقم:')
+  if (session.step === 'teach_details') {
+    session.data.details = ctx.message.text
+    saveAchievement(session.data)
+    delete sessions[uid]
+    return ctx.reply('🌸 تم تسجيل الإنجاز، بانتظار تقييم المعلّم')
+  }
 
-    case 'to':
-      session.data.to = ctx.message.text
-      saveAchievement(ctx, session.data)
-      delete sessions[ctx.from.id]
-      return ctx.reply('🌸 بوركت جهودك، انتظر تقييم المعلم')
+  if (session.step === 'from') {
+    session.data.from = ctx.message.text
+    session.step = 'to'
+    return ctx.reply('🔢 إلى آية رقم:')
+  }
 
-    case 'teaching_details':
-      session.data.details = ctx.message.text
-      saveAchievement(ctx, session.data)
-      delete sessions[ctx.from.id]
-      return ctx.reply('🌸 بوركت جهودك، انتظر تقييم المعلم')
+  if (session.step === 'to') {
+    session.data.to = ctx.message.text
+    saveAchievement(session.data)
+    delete sessions[uid]
+    return ctx.reply('🌸 تم تسجيل الإنجاز، بانتظار تقييم المعلّم')
   }
 })
 
-/* ================== حفظ + إرسال للمعلم ================== */
-function saveAchievement(ctx, data) {
+/* ================== حفظ وإرسال ================== */
+function saveAchievement(data) {
   const id = achievementId++
   achievements[id] = { id, ...data }
 
-  let message = `📥 *إنجاز جديد*\n👤 ${data.studentName}\n📌 ${data.type}\n`
+  let msg = `📥 *إنجاز جديد*\n📌 ${data.type}\n`
 
   if (data.type === '👨‍🏫 تعليم') {
-    message += `\n📝 *تفاصيل التعليم:*\n${data.details}`
+    msg += `\n📝 *تفاصيل التعليم:*\n${data.details}`
   } else {
-    message += `
+    msg += `
 📖 السورة: ${data.surah}
 🔢 من: ${data.from}
 🔢 إلى: ${data.to}`
@@ -155,7 +171,7 @@ function saveAchievement(ctx, data) {
 
   bot.telegram.sendMessage(
     OWNER_ID,
-    message,
+    msg,
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
@@ -167,10 +183,10 @@ function saveAchievement(ctx, data) {
 
 /* ================== التقييم ================== */
 bot.action(/rate_(\d+)/, async ctx => {
-  await ctx.answerCbQuery() // 👈 مهم جدًا
+  await ctx.answerCbQuery()
   const id = ctx.match[1]
 
-  await ctx.editMessageReplyMarkup(
+  ctx.editMessageReplyMarkup(
     Markup.inlineKeyboard([
       [Markup.button.callback('⭐⭐⭐⭐⭐ ممتاز', `star_${id}_5`)],
       [Markup.button.callback('⭐⭐⭐⭐ جيد جدًا', `star_${id}_4`)],
@@ -181,53 +197,45 @@ bot.action(/rate_(\d+)/, async ctx => {
   )
 })
 
-
-
-
 bot.action(/star_(\d+)_(\d)/, ctx => {
-  const [ , id, stars ] = ctx.match
+  const [, id, stars] = ctx.match
   achievements[id].rating = Number(stars)
-
-  ctx.reply(
-    'هل لديك ملاحظات؟',
-    Markup.inlineKeyboard([
-      [Markup.button.callback('✍️ نعم', `note_yes_${id}`)],
-      [Markup.button.callback('❌ لا يوجد', `note_no_${id}`)]
-    ])
-  )
+  waitingForInput[ctx.from.id] = `name_${id}`
+  ctx.reply('✍️ اكتب اسم الطالب:')
 })
 
 bot.action(/note_yes_(\d+)/, ctx => {
-  waitingForNote[ctx.from.id] = ctx.match[1]
+  waitingForInput[ctx.from.id] = `note_${ctx.match[1]}`
   ctx.reply('✍️ اكتب الملاحظة:')
 })
 
 bot.action(/note_no_(\d+)/, ctx => {
   achievements[ctx.match[1]].notes = 'لا يوجد'
-  askSend(ctx, ctx.match[1])
+  sendToStudent(ctx.match[1], ctx)
 })
 
-function askSend(ctx, id) {
-  ctx.reply(
-    '📤 إرسال التقييم للطالب؟',
-    Markup.inlineKeyboard([
-      [Markup.button.callback('إرسال للطالب', `send_${id}`)]
-    ])
-  )
-}
+bot.on('text', ctx => {
+  const key = waitingForInput[ctx.from.id]
+  if (key?.startsWith('note_')) {
+    const id = key.replace('note_', '')
+    achievements[id].notes = ctx.message.text
+    delete waitingForInput[ctx.from.id]
+    sendToStudent(id, ctx)
+  }
+})
 
-/* ================== بطاقة الطالب ================== */
-bot.action(/send_(\d+)/, ctx => {
-  const a = achievements[ctx.match[1]]
+/* ================== إرسال للطالب ================== */
+function sendToStudent(id, ctx) {
+  const a = achievements[id]
   const stars = '⭐'.repeat(a.rating)
 
   let card = `🏅 *بطاقة إنجاز*\n\n👤 ${a.studentName}\n📌 ${a.type}\n`
 
   if (a.type === '👨‍🏫 تعليم') {
-    card += `\n📝 *تفاصيل التعليم:*\n${a.details}`
+    card += `\n📝 ${a.details}`
   } else {
     card += `
-📖 السورة: ${a.surah}
+📖 ${a.surah}
 🔢 من: ${a.from}
 🔢 إلى: ${a.to}`
   }
@@ -235,21 +243,8 @@ bot.action(/send_(\d+)/, ctx => {
   card += `\n\n⭐ *التقييم:* ${stars}\n📝 *ملاحظات المعلم:*\n${a.notes}`
 
   bot.telegram.sendMessage(a.studentId, card, { parse_mode: 'Markdown' })
-  ctx.reply('✅ تم الإرسال')
-})
-
-bot.on('callback_query', async ctx => {
-  try {
-    await ctx.answerCbQuery()
-  } catch (e) {
-    // تجاهل
-  }
-})
-
+  ctx.reply('✅ تم إرسال التقييم للطالب')
+}
 
 bot.launch()
 console.log('Bot running...')
-
-
-
-
