@@ -161,7 +161,7 @@ function saveAchievement(ctx, data) {
 }
 
 /* ================== التقييم ================== */
-bot.action(/rate_(\d+)/, ctx => {
+bot.action(rate_${id})/, ctx => {
   const id = ctx.match[1]
   ctx.editMessageReplyMarkup(
     Markup.inlineKeyboard([
@@ -230,3 +230,4 @@ bot.action(/send_(\d+)/, ctx => {
 
 bot.launch()
 console.log('Bot running...')
+
